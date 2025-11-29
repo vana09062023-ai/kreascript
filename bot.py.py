@@ -11,7 +11,6 @@ from telegram.ext import (
     MessageHandler, ContextTypes, filters
 )
 
-# ---------------- CONFIG ----------------
 BOT_TOKEN = 
 ADMINS_FILE = "admins.json"
 SCRIPTS_FILE = "scripts.json"
@@ -37,8 +36,10 @@ def save_admins(admins):
         json.dump(admins, f)
 
 ADMINS = load_admins()
+
 def is_owner(user_id: int) -> bool:
     return user_id == ADMINS.get("owner")
+
 def is_admin(user_id: int) -> bool:
     return is_owner(user_id) or user_id in ADMINS.get("admins", [])
 
@@ -58,8 +59,10 @@ def save_scripts(data):
         json.dump(data, f)
 
 SCRIPTS = load_scripts()
+
 def generate_code(length=8):
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
+
 def get_script_by_code(code):
     for s in SCRIPTS.get("scripts", []):
         if s["id"] == code:
@@ -69,6 +72,7 @@ def get_script_by_code(code):
 # ---------------- RATE LIMIT ----------------
 _anti_ddos = {}
 _ddos_lock = asyncio.Lock()
+
 async def check_rate_limit(user_id: int):
     if is_owner(user_id):
         return True, 0.0
@@ -89,7 +93,7 @@ async def check_rate_limit(user_id: int):
 
 # ---------------- UI ----------------
 def back_button_markup(to="script"):
-    cb = "script_panel" if to=="script" else "back_admin"
+    cb = "script_panel" if to == "script" else "back_admin"
     return InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data=cb)]])
 
 def admin_main_markup(is_owner_flag: bool):
@@ -105,15 +109,18 @@ def admin_main_markup(is_owner_flag: bool):
 def script_main_markup(user_id: int):
     kb = []
     for script in SCRIPTS.get("scripts", []):
-        kb.append([InlineKeyboardButton(script["id"], callback_data=f"script_{script['id']}")])
+        label = f"{script.get('name','Без названия')} ({script['id']})"
+        kb.append([InlineKeyboardButton(label, callback_data=f"script_{script['id']}")])
     kb.append([InlineKeyboardButton("➕ Добавить скрипт", callback_data="add_script")])
     if is_owner(user_id):
         kb.append([InlineKeyboardButton("➖ Удалить скрипт", callback_data="remove_script")])
     kb.append([InlineKeyboardButton("🔙 Назад", callback_data="back_admin")])
-    return InlineKeyboardMarkup(kb) if kb else None
+    return InlineKeyboardMarkup(kb)
 
 def script_action_markup(user_id: int, script):
-    kb = [[InlineKeyboardButton("🔗 Ссылка", callback_data=f"link_{script['id']}")]]
+    kb = [
+        [InlineKeyboardButton("🔗 Ссылка", callback_data=f"link_{script['id']}")]
+    ]
     if is_owner(user_id) or user_id == script["creator_id"]:
         kb.append([InlineKeyboardButton("✏️ Редактировать", callback_data=f"edit_{script['id']}")])
     if is_owner(user_id):
@@ -174,12 +181,13 @@ async def script_panel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = script_main_markup(user_id)
     await update.message.reply_text("📜 Скрипты:\nВыберите скрипт или действие:", reply_markup=kb)
 
-# ---------------- CALLBACK HANDLER ----------------
+# ---------------- CALLBACKS ----------------
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
     await query.answer()
     data = query.data
+
     if not is_admin(user_id):
         await query.edit_message_text("⛔️ Только админ имеет доступ.")
         return
@@ -188,40 +196,50 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kb = script_main_markup(user_id)
         await query.edit_message_text("📜 Скрипты:\nВыберите скрипт или действие:", reply_markup=kb)
         return
+
     if data == "back_admin":
         await query.edit_message_text("🔧 Админ-панель", reply_markup=admin_main_markup(is_owner(user_id)))
         return
+
     if data.startswith("script_"):
-        code = data.split("_",1)[1]
+        code = data.split("_", 1)[1]
         script = get_script_by_code(code)
         if script:
             kb = script_action_markup(user_id, script)
-            await query.edit_message_text(f"📄 Скрипт {code}", reply_markup=kb)
+            await query.edit_message_text(
+                f"📄 <b>{script.get('name','Без названия')}</b>\nID: {code}",
+                reply_markup=kb, parse_mode="HTML"
+            )
         return
+
     if data.startswith("link_"):
-        code = data.split("_",1)[1]
+        code = data.split("_", 1)[1]
         bot_username = (await context.bot.get_me()).username
         link = f"https://t.me/{bot_username}?start={code}"
         await query.edit_message_text(f"Ссылка для пользователей:\n{link}")
         return
+
     if data.startswith("edit_"):
-        code = data.split("_",1)[1]
+        code = data.split("_", 1)[1]
         script = get_script_by_code(code)
         if script and (is_owner(user_id) or user_id == script["creator_id"]):
-            await query.edit_message_text("✍️ Отправьте новый текст и/или фото для скрипта:")
             context.user_data["editing_script"] = code
+            await query.edit_message_text("✍️ Отправьте новый текст и/или фото:")
         return
+
     if data.startswith("delete_") and is_owner(user_id):
-        code = data.split("_",1)[1]
+        code = data.split("_", 1)[1]
         script = get_script_by_code(code)
         if script:
             SCRIPTS["scripts"].remove(script)
             save_scripts(SCRIPTS)
             await query.edit_message_text(f"🗑 Скрипт {code} удалён")
         return
+
     if data == "add_script":
-        await query.edit_message_text("✍️ Отправьте текст и/или фото для нового скрипта:", reply_markup=back_button_markup())
-        context.user_data["awaiting_script"] = "add"
+        context.user_data.clear()
+        context.user_data["awaiting_script_name"] = True
+        await query.edit_message_text("📝 Введите название нового скрипта:", reply_markup=back_button_markup())
         return
 
 # ---------------- MESSAGE HANDLER ----------------
@@ -229,26 +247,52 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if not is_admin(user_id):
         return
+
     text = update.message.text_html if update.message.text else ""
     photo_id = update.message.photo[-1].file_id if update.message.photo else None
 
-    # Добавление скрипта
-    if context.user_data.get("awaiting_script") == "add":
+    # ШАГ 1 — получаем название
+    if context.user_data.get("awaiting_script_name"):
+        script_name = update.message.text
+        if not script_name:
+            await update.message.reply_text("⚠️ Введите название текстом.")
+            return
+
+        context.user_data["new_script_name"] = script_name
+        context.user_data["awaiting_script_name"] = None
+        context.user_data["awaiting_script_content"] = True
+
+        await update.message.reply_text("✍️ Теперь отправьте текст и/или фото для скрипта.")
+        return
+
+    # ШАГ 2 — создаём скрипт
+    if context.user_data.get("awaiting_script_content"):
+        name = context.user_data.get("new_script_name", "Без названия")
         code = generate_code()
+
         SCRIPTS.setdefault("scripts", []).append({
             "id": code,
+            "name": name,
             "text": text,
             "photo": photo_id,
             "creator_id": user_id
         })
         save_scripts(SCRIPTS)
+
         bot_username = (await context.bot.get_me()).username
         link = f"https://t.me/{bot_username}?start={code}"
-        await update.message.reply_text(f"✅ Скрипт создан!\nСсылка для пользователей:\n{link}")
-        context.user_data["awaiting_script"] = None
+
+        await update.message.reply_text(
+            f"✅ Скрипт создан!\n"
+            f"📄 Название: <b>{name}</b>\n"
+            f"🔗 Ссылка:\n{link}",
+            parse_mode="HTML"
+        )
+
+        context.user_data.clear()
         return
 
-    # Редактирование скрипта
+    # Редактирование
     editing_code = context.user_data.get("editing_script")
     if editing_code:
         script = get_script_by_code(editing_code)
@@ -256,7 +300,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             script["text"] = text
             script["photo"] = photo_id
             save_scripts(SCRIPTS)
-            await update.message.reply_text(f"✏️ Скрипт {editing_code} обновлён")
+            await update.message.reply_text(f"✏️ Скрипт {editing_code} обновлён.")
             context.user_data["editing_script"] = None
 
 # ---------------- RUN BOT ----------------
@@ -272,4 +316,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
