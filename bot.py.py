@@ -12,7 +12,7 @@ from telegram.ext import (
 )
 
 # ---------------- CONFIG ----------------
-BOT_TOKEN = "8400582868:AAGjVIG6Sqhdoa0NaBKTPwygtihnra0SEtk"
+BOT_TOKEN = 
 ADMINS_FILE = "admins.json"
 SCRIPTS_FILE = "scripts.json"
 DEFAULT_OWNER_ID = 2080989762
@@ -272,3 +272,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
