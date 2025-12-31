@@ -11,7 +11,7 @@ from telegram.ext import (
     MessageHandler, ContextTypes, filters
 )
 
-BOT_TOKEN = 
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMINS_FILE = "admins.json"
 SCRIPTS_FILE = "scripts.json"
 DEFAULT_OWNER_ID = 2080989762
@@ -316,3 +316,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
